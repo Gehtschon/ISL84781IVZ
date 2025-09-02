@@ -9,8 +9,21 @@
 #define ISL84781IVZ_DRIVER_ISL84781IVZ_H_
 
 #include "stdbool.h"
+#include "stm32l4xx_hal.h"
 
 // State from Datasheet Table
+
+/*
+ * N00 0000
+ * N01 0001
+ * N02 0010
+ * N03 0011
+ * N04 0100
+ * N05 0101
+ * N06 0110
+ * N07 0111
+ * N08 1000
+ */
 typedef enum {
 	NO0 = 0, NO1, NO2, NO3, NO4, NO5, NO6, NO7, NONE
 } ISL84781IVZ_state_t;
@@ -18,7 +31,7 @@ typedef enum {
 typedef struct {
 	GPIO_TypeDef *ADD_Port;
 	uint16_t ADD_Pin;
-	bool ADD0_Status;
+	bool ADD_Status;
 } Pin;
 
 typedef struct {
@@ -34,19 +47,14 @@ typedef struct {
 
 
 
-// Encodes [INH:ADD2:ADD1:ADD0] in bits 3..0
-static const uint8_t ISL_SELECT_TO_INPUTS[9] = {
-/* NO0  */0b0000,
-/* NO1  */0b0001,
-/* NO2  */0b0010,
-/* NO3  */0b0011,
-/* NO4  */0b0100,
-/* NO5  */0b0101,
-/* NO6  */0b0110,
-/* NO7  */0b0111,
-/* NONE */0b1000  // INH=1, ADDx don't care
-		};
+
+
 
 void Update(ISL84781IVZ *dev, ISL84781IVZ_state_t state);
+
+
+
+static void SetPorts(ISL84781IVZ *dev);
+
 
 #endif /* ISL84781IVZ_DRIVER_ISL84781IVZ_H_ */

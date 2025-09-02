@@ -5,6 +5,9 @@
  *      Author: Fabian Glutz
  */
 
+#include "ISL84781IVZ.h"
+
+
 
 void Update(ISL84781IVZ *dev, ISL84781IVZ_state_t state){
 
@@ -13,7 +16,24 @@ void Update(ISL84781IVZ *dev, ISL84781IVZ_state_t state){
 	}
 	dev->status = state;
 
-	// set pins and all stuff
+	//Determine pins with bit shift
+
+	dev->ADD0.ADD_Status = (state >> 0) & 1u;
+	dev->ADD1.ADD_Status = (state >> 1) & 1u;
+	dev->ADD2.ADD_Status = (state >> 2) & 1u;
+	dev->INH.ADD_Status  = (state >> 3) & 1u;
 
 
+	SetPorts(dev);
+
+
+
+}
+
+
+static void SetPorts(ISL84781IVZ *dev){
+
+	HAL_GPIO_WritePin(dev->ADD0.ADD_Port, dev->ADD0.ADD_Pin, dev->ADD0.ADD_Status);
+	HAL_GPIO_WritePin(dev->ADD1.ADD_Port, dev->ADD1.ADD_Pin, dev->ADD1.ADD_Status);
+	HAL_GPIO_WritePin(dev->ADD2.ADD_Port, dev->ADD2.ADD_Pin, dev->ADD2.ADD_Status);
 }
