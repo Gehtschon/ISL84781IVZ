@@ -31,7 +31,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+ISL84781IVZ dev;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -46,8 +46,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-
-DAC_HandleTypeDef hdac1;
 
 OPAMP_HandleTypeDef hopamp1;
 
@@ -66,7 +64,6 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
-static void MX_DAC1_Init(void);
 static void MX_OPAMP1_Init(void);
 static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
@@ -104,18 +101,19 @@ int main(void)
   /* USER CODE BEGIN SysInit */
 	/* --- USB 48MHz clock on: HSI48 + CRS --- */
 	__HAL_RCC_HSI48_ENABLE();
-	while (!__HAL_RCC_GET_FLAG(RCC_FLAG_HSI48RDY)) {}
+	while (!__HAL_RCC_GET_FLAG(RCC_FLAG_HSI48RDY)) {
+	}
 
 	/* USB-Clockquelle ist in deinem MSP auf HSI48 gesetzt – gut.
-	   Jetzt noch CRS, damit HSI48 sauber getrimmt wird: */
+	 Jetzt noch CRS, damit HSI48 sauber getrimmt wird: */
 	__HAL_RCC_CRS_CLK_ENABLE();
 
-	RCC_CRSInitTypeDef CRSInit = {0};
-	CRSInit.Prescaler             = RCC_CRS_SYNC_DIV1;
-	CRSInit.Source                = RCC_CRS_SYNC_SOURCE_USB;
-	CRSInit.Polarity              = RCC_CRS_SYNC_POLARITY_RISING;
-	CRSInit.ReloadValue           = RCC_CRS_RELOADVALUE_DEFAULT;
-	CRSInit.ErrorLimitValue       = RCC_CRS_ERRORLIMIT_DEFAULT;
+	RCC_CRSInitTypeDef CRSInit = { 0 };
+	CRSInit.Prescaler = RCC_CRS_SYNC_DIV1;
+	CRSInit.Source = RCC_CRS_SYNC_SOURCE_USB;
+	CRSInit.Polarity = RCC_CRS_SYNC_POLARITY_RISING;
+	CRSInit.ReloadValue = RCC_CRS_RELOADVALUE_DEFAULT;
+	CRSInit.ErrorLimitValue = RCC_CRS_ERRORLIMIT_DEFAULT;
 	CRSInit.HSI48CalibrationValue = RCC_CRS_HSI48CALIBRATION_DEFAULT;
 	HAL_RCCEx_CRSConfig(&CRSInit);
 
@@ -125,15 +123,38 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_ADC1_Init();
-  MX_DAC1_Init();
   MX_OPAMP1_Init();
   MX_TIM2_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 	uint32_t t0 = HAL_GetTick();
-	while ((hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED) && (HAL_GetTick() - t0 < 3000)) {
-	    HAL_Delay(10);
+	while ((hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED)
+			&& (HAL_GetTick() - t0 < 3000)) {
+		HAL_Delay(10);
 	}
+
+	ISL84781IVZ_init(&dev, DAC_CTRL_1_0_GPIO_Port, DAC_CTRL_1_0_Pin,
+			DAC_CTRL_1_1_GPIO_Port, DAC_CTRL_1_1_Pin, DAC_CTRL_1_2_GPIO_Port,
+			DAC_CTRL_1_2_Pin, DAC_CTRL_INH_1_GPIO_Port, DAC_CTRL_INH_1_Pin,
+			NONE);
+
+	ISL84781IVZ_Update(&dev, NO0);
+	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev, NO1);
+	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev, NO2);
+	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev, NO3);
+	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev, NO4);
+	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev, NO5);
+	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev, NO6);
+	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev, NO7);
+	HAL_Delay(2000);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -257,49 +278,6 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
-
-}
-
-/**
-  * @brief DAC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_DAC1_Init(void)
-{
-
-  /* USER CODE BEGIN DAC1_Init 0 */
-
-  /* USER CODE END DAC1_Init 0 */
-
-  DAC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN DAC1_Init 1 */
-
-  /* USER CODE END DAC1_Init 1 */
-
-  /** DAC Initialization
-  */
-  hdac1.Instance = DAC1;
-  if (HAL_DAC_Init(&hdac1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** DAC channel OUT1 config
-  */
-  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
-  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_DISABLE;
-  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
-  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC1_Init 2 */
-
-  /* USER CODE END DAC1_Init 2 */
 
 }
 
@@ -437,7 +415,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, DAC_CTRL_INH_2_Pin|DAC_CTRL_INH_1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|DAC_CTRL_INH_2_Pin|DAC_CTRL_INH_1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, DAC_CTRL_2_2_Pin|DAC_CTRL_2_1_Pin|ADC_CTRL_2_0_Pin|ADC_CTRL_1_2_Pin
@@ -445,6 +423,16 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, DAC_CTRL_2_0_Pin|DAC_CTRL_1_2_Pin|DAC_CTRL_1_1_Pin|DAC_CTRL_1_0_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, ADC_CTRL_INH_2_Pin|ADC_CTRL_INH_1_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin : PA4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : DAC_CTRL_INH_2_Pin DAC_CTRL_INH_1_Pin */
   GPIO_InitStruct.Pin = DAC_CTRL_INH_2_Pin|DAC_CTRL_INH_1_Pin;
@@ -462,15 +450,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : DAC_CTRL_2_0_Pin DAC_CTRL_1_2_Pin DAC_CTRL_1_1_Pin DAC_CTRL_1_0_Pin */
-  GPIO_InitStruct.Pin = DAC_CTRL_2_0_Pin|DAC_CTRL_1_2_Pin|DAC_CTRL_1_1_Pin|DAC_CTRL_1_0_Pin;
+  /*Configure GPIO pins : DAC_CTRL_2_0_Pin DAC_CTRL_1_2_Pin DAC_CTRL_1_1_Pin DAC_CTRL_1_0_Pin
+                           ADC_CTRL_INH_2_Pin ADC_CTRL_INH_1_Pin */
+  GPIO_InitStruct.Pin = DAC_CTRL_2_0_Pin|DAC_CTRL_1_2_Pin|DAC_CTRL_1_1_Pin|DAC_CTRL_1_0_Pin
+                          |ADC_CTRL_INH_2_Pin|ADC_CTRL_INH_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : ADC_CTRL_INH_2_Pin ADC_CTRL_INH_1_Pin ADC_CTRL_2_2_Pin ADC_CTRL_2_1_Pin */
-  GPIO_InitStruct.Pin = ADC_CTRL_INH_2_Pin|ADC_CTRL_INH_1_Pin|ADC_CTRL_2_2_Pin|ADC_CTRL_2_1_Pin;
+  /*Configure GPIO pins : ADC_CTRL_2_2_Pin ADC_CTRL_2_1_Pin */
+  GPIO_InitStruct.Pin = ADC_CTRL_2_2_Pin|ADC_CTRL_2_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);

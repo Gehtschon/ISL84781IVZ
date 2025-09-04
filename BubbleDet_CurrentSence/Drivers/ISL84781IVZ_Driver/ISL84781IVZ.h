@@ -45,16 +45,12 @@ typedef struct {
 
 } ISL84781IVZ;
 
+void ISL84781IVZ_init(ISL84781IVZ *dev, GPIO_TypeDef *ADD0_Port,
+		uint16_t ADD0_Pin, GPIO_TypeDef *ADD1_Port, uint16_t ADD1_Pin,
+		GPIO_TypeDef *ADD2_Port, uint16_t ADD2_Pin, GPIO_TypeDef *INH_Port,uint16_t INH_Pin,ISL84781IVZ_state_t state );
 
+void ISL84781IVZ_Update(ISL84781IVZ *dev, ISL84781IVZ_state_t state);
 
-
-
-
-void Update(ISL84781IVZ *dev, ISL84781IVZ_state_t state);
-
-
-
-static void SetPorts(ISL84781IVZ *dev);
-
+static void ISL84781IVZ_SetPorts(ISL84781IVZ *dev);
 
 #endif /* ISL84781IVZ_DRIVER_ISL84781IVZ_H_ */
