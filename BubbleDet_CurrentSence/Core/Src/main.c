@@ -31,12 +31,16 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-ISL84781IVZ dev;
+ISL84781IVZ dev_Out_1;
+ISL84781IVZ dev_Out_2;
+uint8_t rxBuffer[2048];
+uint8_t rxLenght = 0;
+bool rxDataReady;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define ADC_BUF_LEN 4096
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,6 +50,7 @@ ISL84781IVZ dev;
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 OPAMP_HandleTypeDef hopamp1;
 
@@ -57,11 +62,14 @@ UART_HandleTypeDef huart1;
 extern USBD_HandleTypeDef hUsbDeviceFS;
 uint8_t testVar = 0;
 
+uint16_t adc_buff[ADC_BUF_LEN];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_OPAMP1_Init(void);
@@ -121,6 +129,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART1_UART_Init();
   MX_ADC1_Init();
   MX_OPAMP1_Init();
@@ -133,27 +142,36 @@ int main(void)
 		HAL_Delay(10);
 	}
 
-	ISL84781IVZ_init(&dev, DAC_CTRL_1_0_GPIO_Port, DAC_CTRL_1_0_Pin,
+	ISL84781IVZ_init(&dev_Out_1, DAC_CTRL_1_0_GPIO_Port, DAC_CTRL_1_0_Pin,
 			DAC_CTRL_1_1_GPIO_Port, DAC_CTRL_1_1_Pin, DAC_CTRL_1_2_GPIO_Port,
 			DAC_CTRL_1_2_Pin, DAC_CTRL_INH_1_GPIO_Port, DAC_CTRL_INH_1_Pin,
 			NONE);
 
-	ISL84781IVZ_Update(&dev, NO0);
+	ISL84781IVZ_init(&dev_Out_2, DAC_CTRL_2_0_GPIO_Port, DAC_CTRL_2_0_Pin,
+			DAC_CTRL_2_1_GPIO_Port, DAC_CTRL_2_1_Pin, DAC_CTRL_2_2_GPIO_Port,
+			DAC_CTRL_2_2_Pin, DAC_CTRL_INH_2_GPIO_Port, DAC_CTRL_INH_2_Pin,
+			NONE);
+
+
+	ISL84781IVZ_Update(&dev_Out_1, NO0);
 	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev, NO1);
+	ISL84781IVZ_Update(&dev_Out_1, NO1);
 	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev, NO2);
+	ISL84781IVZ_Update(&dev_Out_1, NO2);
 	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev, NO3);
+	ISL84781IVZ_Update(&dev_Out_1, NO3);
 	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev, NO4);
+	ISL84781IVZ_Update(&dev_Out_1, NO4);
 	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev, NO5);
+	ISL84781IVZ_Update(&dev_Out_1, NO5);
 	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev, NO6);
+	ISL84781IVZ_Update(&dev_Out_1, NO6);
 	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev, NO7);
+	ISL84781IVZ_Update(&dev_Out_1, NO7);
 	HAL_Delay(2000);
+
+
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buff, ADC_BUF_LEN);
 
   /* USER CODE END 2 */
 
@@ -164,10 +182,28 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 		/* Send over USB CDC */
-		CDC_Transmit_FS(TxMessageBuffer, sizeof(TxMessageBuffer) - 1);
+		//CDC_Transmit_FS(TxMessageBuffer, sizeof(TxMessageBuffer) - 1);
 		// "-1" so you don’t send the trailing '\0'
 
-		HAL_Delay(500);
+//		if (rxDataReady == true) {
+//			rxDataReady = false;
+//			CDC_Transmit_FS(rxBuffer, rxLenght);
+//		}
+
+		if (rxDataReady == true) {
+			rxDataReady = false;
+			uint8_t ascii = rxBuffer[0];
+			uint8_t number = ascii - '0';
+			if (ascii >= '0' && ascii <= '9') {
+			    number = ascii - '0';
+			}
+			ISL84781IVZ_state_t state = number;
+
+			CDC_Transmit_FS(rxBuffer, rxLenght);
+			ISL84781IVZ_Update(&dev_Out_2, state);
+		}
+
+
 	}
   /* USER CODE END 3 */
 }
@@ -253,9 +289,9 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_CC1;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.OversamplingMode = DISABLE;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
@@ -265,7 +301,7 @@ static void MX_ADC1_Init(void)
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_8;
+  sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
@@ -399,6 +435,22 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -476,7 +528,13 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc){
 
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
+
+}
 /* USER CODE END 4 */
 
 /**

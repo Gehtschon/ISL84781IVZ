@@ -59,10 +59,6 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define ADC_DIFF_P_Pin GPIO_PIN_0
-#define ADC_DIFF_P_GPIO_Port GPIOC
-#define ADC_DIFF_N_Pin GPIO_PIN_1
-#define ADC_DIFF_N_GPIO_Port GPIOC
 #define ADC_SINGLE_Pin GPIO_PIN_2
 #define ADC_SINGLE_GPIO_Port GPIOC
 #define DAC_CTRL_INH_2_Pin GPIO_PIN_6
