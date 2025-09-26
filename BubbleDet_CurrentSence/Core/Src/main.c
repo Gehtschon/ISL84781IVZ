@@ -31,16 +31,40 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+#define ADC_BUF_LEN 4096
+#define HALF_LEN   (ADC_BUF_LEN/2)
+#define LINE_BUF  16
+#define CHUNK_SAMPLES  32       // number of ADC samples per USB packet
+
+#define VREF   3.3f
+
+
 ISL84781IVZ dev_Out_1;
 ISL84781IVZ dev_Out_2;
+ISL84781IVZ dev_In_1;
+ISL84781IVZ dev_In_2;
+// Array for holding the ISL84781IVZ devices
+ISL84781IVZ *OutISL[] = { &dev_Out_1, &dev_Out_2 };
+ISL84781IVZ *InISL[] = { &dev_In_1, &dev_In_2 };
+char TxMessageBuffer[] = {"Hello"};
+
 uint8_t rxBuffer[2048];
 uint8_t rxLenght = 0;
 bool rxDataReady;
+bool send_half_buffer_flag;
+uint16_t *adc_half_ptr = NULL;               // pointer to half-buffer
+bool fullBufferReady;
+uint32_t tx_index = 0;         // next sample index to send
+static char tx_chunk[CHUNK_SAMPLES * LINE_BUF];
+
+volatile uint32_t adc_sample_count = 0;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define ADC_BUF_LEN 4096
+
+
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -55,6 +79,7 @@ DMA_HandleTypeDef hdma_adc1;
 OPAMP_HandleTypeDef hopamp1;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim6;
 
 UART_HandleTypeDef huart1;
 
@@ -74,8 +99,9 @@ static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_OPAMP1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
-
+void SendHalfBuffer(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -91,7 +117,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	uint8_t TxMessageBuffer[] = "MY USB IS WORKING! \r\n";
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -112,8 +138,8 @@ int main(void)
 	while (!__HAL_RCC_GET_FLAG(RCC_FLAG_HSI48RDY)) {
 	}
 
-	/* USB-Clockquelle ist in deinem MSP auf HSI48 gesetzt – gut.
-	 Jetzt noch CRS, damit HSI48 sauber getrimmt wird: */
+	/* USB-Clockquelle  auf HSI48 gesetzt
+	 getrimmt : */
 	__HAL_RCC_CRS_CLK_ENABLE();
 
 	RCC_CRSInitTypeDef CRSInit = { 0 };
@@ -135,6 +161,7 @@ int main(void)
   MX_OPAMP1_Init();
   MX_TIM2_Init();
   MX_USB_DEVICE_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
 	uint32_t t0 = HAL_GetTick();
 	while ((hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED)
@@ -143,35 +170,43 @@ int main(void)
 	}
 
 	ISL84781IVZ_init(&dev_Out_1, DAC_CTRL_1_0_GPIO_Port, DAC_CTRL_1_0_Pin,
-			DAC_CTRL_1_1_GPIO_Port, DAC_CTRL_1_1_Pin, DAC_CTRL_1_2_GPIO_Port,
-			DAC_CTRL_1_2_Pin, DAC_CTRL_INH_1_GPIO_Port, DAC_CTRL_INH_1_Pin,
-			NONE);
+	DAC_CTRL_1_1_GPIO_Port, DAC_CTRL_1_1_Pin, DAC_CTRL_1_2_GPIO_Port,
+	DAC_CTRL_1_2_Pin, DAC_CTRL_INH_1_GPIO_Port, DAC_CTRL_INH_1_Pin, NONE);
 
 	ISL84781IVZ_init(&dev_Out_2, DAC_CTRL_2_0_GPIO_Port, DAC_CTRL_2_0_Pin,
-			DAC_CTRL_2_1_GPIO_Port, DAC_CTRL_2_1_Pin, DAC_CTRL_2_2_GPIO_Port,
-			DAC_CTRL_2_2_Pin, DAC_CTRL_INH_2_GPIO_Port, DAC_CTRL_INH_2_Pin,
-			NONE);
+	DAC_CTRL_2_1_GPIO_Port, DAC_CTRL_2_1_Pin, DAC_CTRL_2_2_GPIO_Port,
+	DAC_CTRL_2_2_Pin, DAC_CTRL_INH_2_GPIO_Port, DAC_CTRL_INH_2_Pin, NONE);
 
+	ISL84781IVZ_init(&dev_In_1, ADC_CTRL_1_0_GPIO_Port, ADC_CTRL_1_0_Pin,
+	ADC_CTRL_1_1_GPIO_Port, ADC_CTRL_1_1_Pin, ADC_CTRL_1_2_GPIO_Port,
+	ADC_CTRL_1_2_Pin, ADC_CTRL_INH_1_GPIO_Port, ADC_CTRL_INH_1_Pin, NONE);
+
+	ISL84781IVZ_init(&dev_In_2, ADC_CTRL_2_0_GPIO_Port, ADC_CTRL_2_0_Pin,
+	ADC_CTRL_2_1_GPIO_Port, ADC_CTRL_2_1_Pin, ADC_CTRL_2_2_GPIO_Port,
+	ADC_CTRL_2_2_Pin, ADC_CTRL_INH_2_GPIO_Port, ADC_CTRL_INH_2_Pin, NONE);
+
+//	ISL84781IVZ_Update(&dev_Out_1, NO0);
+//	HAL_Delay(2000);
+//	ISL84781IVZ_Update(&dev_Out_1, NO1);
+//	HAL_Delay(2000);
+//	ISL84781IVZ_Update(&dev_Out_1, NO2);
+//	HAL_Delay(2000);
+//	ISL84781IVZ_Update(&dev_Out_1, NO3);
+//	HAL_Delay(2000);
+//	ISL84781IVZ_Update(&dev_Out_1, NO4);
+//	HAL_Delay(2000);
+//	ISL84781IVZ_Update(&dev_Out_1, NO5);
+//	HAL_Delay(2000);
+//	ISL84781IVZ_Update(&dev_Out_1, NO6);
+//	HAL_Delay(2000);
+//	ISL84781IVZ_Update(&dev_Out_1, NO7);
+//	HAL_Delay(2000);
 
 	ISL84781IVZ_Update(&dev_Out_1, NO0);
-	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev_Out_1, NO1);
-	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev_Out_1, NO2);
-	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev_Out_1, NO3);
-	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev_Out_1, NO4);
-	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev_Out_1, NO5);
-	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev_Out_1, NO6);
-	HAL_Delay(2000);
-	ISL84781IVZ_Update(&dev_Out_1, NO7);
-	HAL_Delay(2000);
+	ISL84781IVZ_Update(&dev_In_2, NO0);
 
-
-	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buff, ADC_BUF_LEN);
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc_buff, ADC_BUF_LEN);
+	HAL_TIM_Base_Start(&htim6);
 
   /* USER CODE END 2 */
 
@@ -184,27 +219,27 @@ int main(void)
 		/* Send over USB CDC */
 		//CDC_Transmit_FS(TxMessageBuffer, sizeof(TxMessageBuffer) - 1);
 		// "-1" so you don’t send the trailing '\0'
-
 //		if (rxDataReady == true) {
 //			rxDataReady = false;
 //			CDC_Transmit_FS(rxBuffer, rxLenght);
 //		}
+		rxDataReady = false;
+		uint8_t ascii = rxBuffer[0];
+		uint8_t number = ascii - '0';
+//		if (ascii >= '0' && ascii <= '9') {
+//			number = ascii - '0';
+//		}
+//		ISL84781IVZ_state_t state = number;
+//
+//		CDC_Transmit_FS(rxBuffer, rxLenght);
+		//ISL84781IVZ_Update(&dev_In_2, state);
 
-		if (rxDataReady == true) {
-			rxDataReady = false;
-			uint8_t ascii = rxBuffer[0];
-			uint8_t number = ascii - '0';
-			if (ascii >= '0' && ascii <= '9') {
-			    number = ascii - '0';
-			}
-			ISL84781IVZ_state_t state = number;
 
-			CDC_Transmit_FS(rxBuffer, rxLenght);
-			ISL84781IVZ_Update(&dev_Out_2, state);
-		}
+			SendHalfBuffer();
 
 
 	}
+
   /* USER CODE END 3 */
 }
 
@@ -289,7 +324,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_CC1;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T6_TRGO;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
@@ -400,6 +435,44 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM6_Init(void)
+{
+
+  /* USER CODE BEGIN TIM6_Init 0 */
+
+  /* USER CODE END TIM6_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM6_Init 1 */
+
+  /* USER CODE END TIM6_Init 1 */
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 0;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = 19900;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM6_Init 2 */
+
+  /* USER CODE END TIM6_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -467,24 +540,18 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|DAC_CTRL_INH_2_Pin|DAC_CTRL_INH_1_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, DAC_CTRL_INH_2_Pin|DAC_CTRL_INH_1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, DAC_CTRL_2_2_Pin|DAC_CTRL_2_1_Pin|ADC_CTRL_2_0_Pin|ADC_CTRL_1_2_Pin
                           |ADC_CTRL_1_1_Pin|ADC_CTRL_1_0_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, DAC_CTRL_2_0_Pin|DAC_CTRL_1_2_Pin|DAC_CTRL_1_1_Pin|DAC_CTRL_1_0_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, DAC_CTRL_2_0_Pin|DAC_CTRL_1_2_Pin|DAC_CTRL_1_1_Pin|DAC_CTRL_1_0_Pin
+                          |ADC_CTRL_2_2_Pin|ADC_CTRL_2_1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, ADC_CTRL_INH_2_Pin|ADC_CTRL_INH_1_Pin, GPIO_PIN_SET);
-
-  /*Configure GPIO pin : PA4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : DAC_CTRL_INH_2_Pin DAC_CTRL_INH_1_Pin */
   GPIO_InitStruct.Pin = DAC_CTRL_INH_2_Pin|DAC_CTRL_INH_1_Pin;
@@ -503,18 +570,12 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : DAC_CTRL_2_0_Pin DAC_CTRL_1_2_Pin DAC_CTRL_1_1_Pin DAC_CTRL_1_0_Pin
-                           ADC_CTRL_INH_2_Pin ADC_CTRL_INH_1_Pin */
+                           ADC_CTRL_INH_2_Pin ADC_CTRL_INH_1_Pin ADC_CTRL_2_2_Pin ADC_CTRL_2_1_Pin */
   GPIO_InitStruct.Pin = DAC_CTRL_2_0_Pin|DAC_CTRL_1_2_Pin|DAC_CTRL_1_1_Pin|DAC_CTRL_1_0_Pin
-                          |ADC_CTRL_INH_2_Pin|ADC_CTRL_INH_1_Pin;
+                          |ADC_CTRL_INH_2_Pin|ADC_CTRL_INH_1_Pin|ADC_CTRL_2_2_Pin|ADC_CTRL_2_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : ADC_CTRL_2_2_Pin ADC_CTRL_2_1_Pin */
-  GPIO_InitStruct.Pin = ADC_CTRL_2_2_Pin|ADC_CTRL_2_1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB5 PB6 */
@@ -528,13 +589,56 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc){
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc) {
+//	uint8_t TxMessageBuffer[] = "MY USB IS WORKING! \r\n";
+//	CDC_Transmit_FS(TxMessageBuffer, sizeof(TxMessageBuffer) - 1);
+	//adc_sample_count += (ADC_BUF_LEN/2);
+	ADC_HalfCompleteCallback(&adc_buff[0]); // first half
 
 }
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
-
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+	//adc_sample_count += (ADC_BUF_LEN/2);
+	ADC_HalfCompleteCallback(&adc_buff[HALF_LEN]); // second half
 }
+
+// Call this from ADC half-complete callback
+void ADC_HalfCompleteCallback(uint16_t *samples) {
+    adc_half_ptr = samples;
+    send_half_buffer_flag = true;
+    tx_index = 0;
+}
+
+void SendHalfBuffer(void) {
+    if (!send_half_buffer_flag || adc_half_ptr == NULL) return;
+
+    while (tx_index < HALF_LEN) {
+        uint32_t chunk_count = (HALF_LEN - tx_index) > CHUNK_SAMPLES ? CHUNK_SAMPLES : (HALF_LEN - tx_index);
+        uint32_t pos = 0;
+
+        // Convert chunk samples to ASCII lines
+        for (uint32_t i = 0; i < chunk_count; i++) {
+            float voltage = (adc_half_ptr[tx_index + i] / 4095.0f) * VREF;
+            int n = snprintf(&tx_chunk[pos], LINE_BUF, "%.3f\r\n", voltage);
+            pos += n;
+        }
+        // Non-blocking transmit: try sending this chunk
+        if (CDC_Transmit_FS((uint8_t*)tx_chunk, pos) == USBD_OK) {
+            tx_index += chunk_count;  // advance index
+        } else {
+            // USB busy, try again next main loop iteration
+            return;
+        }
+    }
+
+    // Full half-buffer sent
+    adc_half_ptr = NULL;
+    send_half_buffer_flag = false;
+}
+
+
+
+
 /* USER CODE END 4 */
 
 /**

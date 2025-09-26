@@ -51,6 +51,15 @@ void ISL84781IVZ_init(ISL84781IVZ *dev, GPIO_TypeDef *ADD0_Port,
 
 void ISL84781IVZ_Update(ISL84781IVZ *dev, ISL84781IVZ_state_t state);
 
+ISL84781IVZ_state_t ISL84781IVZ_GoNext(ISL84781IVZ *dev);
+ISL84781IVZ_state_t ISL84781IVZ_GoPrevious(ISL84781IVZ *dev);
+// Working with multiple devices
+void ISL84781IVZ_GoNext_Multiple(ISL84781IVZ* devs[], uint8_t numDevs);
+void ISL84781IVZ_InOutNext(ISL84781IVZ *InDevs[], uint8_t InNumDevs, ISL84781IVZ *OutDevs[], uint8_t OutNumDevs);
+
+
 static void ISL84781IVZ_SetPorts(ISL84781IVZ *dev);
+
+
 
 #endif /* ISL84781IVZ_DRIVER_ISL84781IVZ_H_ */
